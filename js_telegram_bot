@@ -1,0 +1,31 @@
+// telegram-bot/bot.js
+const TelegramBot = require('node-telegram-bot-api');
+const NoteService = require('../backend/service');
+
+class GoalBot {
+  constructor(token, noteService) {
+    this.bot = new TelegramBot(token, {polling: true});
+    this.noteService = noteService;
+    this.setupHandlers();
+  }
+
+  setupHandlers() {
+    this.bot.onText(/\/start/, (msg) => {
+      this.bot.sendMessage(msg.chat.id, 
+        'Добро пожаловать в GoalNoteBot! Я буду напоминать вам о ваших целях.\n\n' +
+        'Доступные команды:\n' +
+        '/goals - показать текущие цели\n' +
+        '/subscribe - подписаться на уведомления\n' +
+        '/unsubscribe - отписаться от уведомлений');
+    });
+
+    this.bot.onText(/\/subscribe/, (msg) => {
+      // Логика подписки
+      this.bot.sendMessage(msg.chat.id, 'Вы подписались на уведомления о целях!');
+    });
+
+    // Другие обработчики команд...
+  }
+}
+
+module.exports = GoalBot;
