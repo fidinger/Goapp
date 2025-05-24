@@ -1,0 +1,75 @@
+// backend/service.js
+const fs = require('fs');
+const path = require('path');
+const { ipcMain } = require('electron');
+const TelegramBot = require('node-telegram-bot-api');
+
+class GoalNoteService {
+  constructor(dataDir) {
+    this.dataDir = dataDir;
+    this.notes = {};
+    this.bot = null;
+    this.setupIPC();
+  }
+
+  setupIPC() {
+    ipcMain.handle('get-notes', () => this.getNotes());
+    ipcMain.handle('save-note', (event, {id, content}) => this.saveNote(id, content));
+    ipcMain.handle('set-telegram-token', (event, token) => this.setupTelegramBot(token));
+    // Другие IPC-обработчики...
+  }
+
+  getNotes() {
+    // Загрузка заметок из файловой системы
+    const files = fs.readdirSync(this.dataDir);
+    return files.filter(f => f.endsWith('.md')).map(f => ({
+      id: f.replace('.md', ''),
+      content: fs.readFileSync(path.join(this.dataDir, f), 'utf-8')
+    }));
+  }
+
+  saveNote(id, content) {
+    // Сохранение заметки
+    fs.writeFileSync(path.join(this.dataDir, `${id}.md`), content);
+    this.checkForGoals(content); // Проверка на наличие целей в заметке
+  }
+
+  checkForGoals(content) {
+    // Парсинг заметки на наличие целей и дедлайнов
+    const goalRegex = /#goal (.+?) deadline: (.+?)(?:\n|$)/g;
+    let match;
+    while ((match = goalRegex.exec(content)) !== null) {
+      const [, goalText, deadline] = match;
+      this.scheduleNotification(goalText, deadline);
+    }
+  }
+
+  setupTelegramBot(token) {
+    if (this.bot) this.bot.stopPolling();
+    this.bot = new TelegramBot(token, {polling: true});
+    
+    this.bot.onText(/\/goals/, (msg) => {
+      const chatId = msg.chat.id;
+      const goals = this.getUpcomingGoals();
+      this.bot.sendMessage(chatId, goals.length ? goals.join('\n') : 'Нет активных целей');
+    });
+  }
+
+  scheduleNotification(goalText, deadline) {
+    // Запланировать уведомление через Telegram бота
+    const deadlineDate = new Date(deadline);
+    const now = new Date();
+    const diff = deadlineDate - now;
+    
+    if (diff > 0) {
+      setTimeout(() => {
+        if (this.bot) {
+          // Отправляем уведомление всем подписанным пользователям
+          this.bot.sendMessage(chatId, `⏰ Напоминание о цели: ${goalText}\nДедлайн: ${deadline}`);
+        }
+      }, diff);
+    }
+  }
+}
+
+module.exports = GoalNoteService;
